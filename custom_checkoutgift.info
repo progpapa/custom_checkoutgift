@@ -2,3 +2,9 @@ name = Custom Checkout Gift
 description = Enables customers to add a gift message to the order. Also creates a line item.
 core = 7.x
 package = Commerce (custom)
+
+dependencies[] = commerce
+dependencies[] = commerce_order
+dependencies[] = commerce_checkout
+dependencies[] = commerce_line_item
+dependencies[] = entity
