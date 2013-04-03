@@ -1,0 +1,69 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for the custom_checkoutgift module.
+ *
+ * - Creates a textfield and attaches it to the $order entity.
+ */
+
+/**
+ * Implements hook_enable().
+ */
+function custom_checkoutgift_enable() {
+
+  // This function configures all existing line item types, including ours.
+  commerce_line_item_configure_line_item_types();
+
+  $field_name = 'field_customco_gift_message';
+
+  if (!field_info_field($field_name)) {
+
+    $field = array(
+        'field_name' => $field_name,
+        'type' => 'text',
+    );
+    field_create_field($field);
+
+    // Create the instance on the bundle.
+    $instance = array(
+      'field_name' => $field_name,
+      'entity_type' => 'commerce_order',
+      'label' => 'Gift Message',
+      'bundle' => 'commerce_order',
+      'settings' => array(
+      ),
+      'widget' => array(
+          'type' => 'textfield',
+          'active' => 1,
+      ),
+    );
+
+    // Makes sure the field is displayed on the admin page at
+    // admin/commerce/orders/%/view
+    $instance['display']['administrator']['type'] = 'text_plain';
+
+    field_create_instance($instance);
+  }  // if
+
+} // custom_checkoutgift_enable()
+
+ /**
+ * Implements hook_uninstall().
+ */
+function custom_checkoutgift_uninstall() {
+
+  $field_name = 'field_customco_gift_message';
+
+  field_delete_field($field_name);
+  field_purge_batch(10);
+
+  $variables = array(
+    'custom_checkoutgift_line_item_amount',
+    'custom_checkoutgift_line_item_currency',
+  );
+  foreach ($variables as $variable) {
+    variable_del($variable);
+  }
+
+} // custom_checkoutgift_uninstall

@@ -1,0 +1,367 @@
+<?php
+
+/**
+ * @file
+ * Saves gift message and gift_service line item.
+ *
+ * - Creates a new pane for the gift message.
+ * - Adds a 'Gift service' price component.
+ * - Creates a 'gift_service' line item.
+ * - Defines validation and submit handlers for adding/removing gift messages
+ *   (and line items)
+ */
+
+/**
+ * Implements hook_commerce_checkout_pane_info()
+ */
+function custom_checkoutgift_commerce_checkout_pane_info() {
+
+  $panes = array();
+
+  $panes['custom_checkoutgift'] = array(
+    'title' => t('Gift Service'),
+    'page' => 'checkout',
+    'weight' => 10,
+    'file' => 'includes/custom_checkoutgift.checkout_pane.inc',
+    'base' => 'custom_checkoutgift',
+    'collapsible' => TRUE,
+    'collapsed' => TRUE,
+  );
+
+  return $panes;
+
+} // custom_checkoutgift_commerce_checkout_pane_info
+
+/**
+ * Implements hook_form_alter().
+ */
+function custom_checkoutgift_form_alter(&$form, &$form_state, $form_id) {
+
+  // Makes sure we are on a checkout page.
+  $str = 'commerce_checkout_form_';
+  if (substr($form_id, 0, strlen($str)) == $str ) {
+
+    if (isset($form['custom_checkoutgift'])) {
+
+      $form['custom_checkoutgift']['#title'] = t('Gift Service')
+      . '<div class="legend-text">' . t('(Enter a message)') . '</div>';
+
+    } // if
+
+  } // if
+
+} // custom_checkoutgift_form_alter
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function custom_checkoutgift_commerce_price_component_type_info() {
+
+  $components = array();
+
+  // The extra fee for the Gift service.
+  $components['gift_service'] = array(
+    'title' => t('Gift Service'),
+    'display_title' => t('Gift Service'),
+    'weight' => 20,
+  );
+
+  return $components;
+
+} // custom_checkoutgift_commerce_price_component_type_info
+
+/**
+ * Implements hook_commerce_line_item_type_info().
+ */
+function custom_checkoutgift_commerce_line_item_type_info() {
+
+  $line_item_types = array();
+
+
+  $line_item_types['gift_service'] = array(
+    'name' => t('Gift Service'),
+    'description' => t('Add a gift service to the order.'),
+    'product' => FALSE,
+    'add_form_submit_value' => t('Add gift service'),
+    'base' => 'custom_checkoutgift_line_item',
+  );
+
+  return $line_item_types;
+
+} // custom_checkoutgift_commerce_line_item_type_info
+
+/**
+ * Configure the line item with additional fields or whatever.
+ */
+function custom_checkoutgift_line_item_configuration($line_item_type) {
+
+  $type = $line_item_type['type'];
+
+} // custom_checkoutgift_line_item_configuration
+
+/**
+ * Returns a title for this line item.
+ */
+function custom_checkoutgift_line_item_title($line_item) {
+
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+  if (!empty($line_item->data['gift_service']['display_title'])) {
+    return $line_item->data['gift_service']['display_title'];
+  } // if
+  else {
+    return t('Gift Service');
+  } // else
+
+} // custom_checkoutgift_line_item_title
+
+/**
+ * Returns the elements necessary to add a product line item through a line
+ * item manager widget (on the order form).
+ */
+function custom_checkoutgift_line_item_add_form($element, &$form_state) {
+
+  $form = array();
+  return $form;
+
+} // custom_checkoutgift_line_item_add_form
+
+/**
+ * Adds the selected product information to a line item added via a line item
+ *   manager widget (on the admin order page).
+ *
+ * @param $line_item
+ *   The newly created line item object.
+ * @param $element
+ *   The array representing the widget form element.
+ * @param $form_state
+ *   The present state of the form upon the latest submission.
+ * @param $form
+ *   The actual form array.
+ *
+ * @return
+ *   NULL if all is well or an error message if something goes wrong.
+ */
+function custom_checkoutgift_line_item_add_form_submit(&$line_item, $element, &$form_state, $form) {
+
+  $line_item->line_item_label = t('Gift Service');
+
+  // Ensures a quantity of 1.
+  $line_item->quantity = 1;
+
+  // Wraps the line item and product to easily set field information.
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+  // Provides a default price. Default price can be changed by configuring the
+  // Gift Service pane.
+  // i.e.: admin/commerce/config/checkout/form/pane/custom_checkout_gift_service
+  // See custom_checkout_gift_settings_form() for more.
+  $amount = 100* variable_get('custom_checkoutgift_line_item_amount', 3.95);
+  $currency_code = variable_get('custom_checkoutgift_line_item_currency', 'EUR');
+
+  $line_item->commerce_unit_price = array(LANGUAGE_NONE => array(
+    '0' => array(
+      'amount' => $amount,
+      'currency_code' => $currency_code
+      )
+  ));
+
+  if (!is_null($line_item_wrapper->commerce_unit_price->value())) {
+
+    // Adds the price to the components array.
+    if (!commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), 'gift_service')) {
+
+      $line_item_wrapper->commerce_unit_price->data =
+          commerce_price_component_add(
+            $line_item_wrapper->commerce_unit_price->value(),
+            'gift_service',
+            $line_item_wrapper->commerce_unit_price->value(),
+            TRUE
+          );
+
+    } // if
+
+  } // if
+
+} // custom_checkoutgift_line_item_add_form_submit
+
+/**
+ * Utility function which creates a new gift_service line item populated with
+ * the default price, etc.
+ *
+ * @param $order_id
+ *   The ID of the order the line item belongs to (if available).
+ *
+ * @return
+ *   The fully loaded line item.
+ */
+function custom_checkoutgift_line_item_new($order_id = 0) {
+
+  $type = 'gift_service';
+
+  // Creates the new line item.
+  $line_item = entity_create('commerce_line_item', array(
+    'type' => $type,
+    'order_id' => $order_id,
+    'quantity' => 1,
+  ));
+
+  // Provides a default price.
+  $amount = 100* variable_get('custom_checkoutgift_line_item_amount', 3.95);
+  $currency_code = variable_get('custom_checkoutgift_line_item_currency', 'EUR');
+
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+  $line_item_wrapper->commerce_unit_price->amount = $amount;
+  $line_item_wrapper->commerce_unit_price->currency_code = $currency_code;
+  // Sets the price component of the unit price.
+  $line_item_wrapper->commerce_unit_price->data =
+      commerce_price_component_add(
+        $line_item_wrapper->commerce_unit_price->value(),
+        'gift_service',
+        $line_item_wrapper->commerce_unit_price->value(),
+        TRUE,
+        FALSE
+      );
+
+  // Returns the line item.
+  return $line_item;
+
+} // custom_checkoutgift_line_item_new
+
+/**
+ * Deletes a custom line item from the order.
+ *
+ * Something like commerce_cart_order_product_line_item_delete() in
+ * commerce_cart.module.
+ * A better example: commerce_shipping_delete_shipping_line_items()
+ * in commerce_shipping.module.
+ *
+ * @param string $line_item_type
+ *   The type of the line item to delete.
+ * @param object $order
+ *   The order object.
+ * @param bool $skip_save
+ *   TRUE when the order would otherwise be saved.
+ */
+function custom_checkoutgift_cart_order_custom_line_item_delete($line_item_type, $order, $skip_save = FALSE) {
+
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // When deleting more than one line item, metadata_wrapper will give problems
+  // if deleting while looping through the line items. So first remove from the
+  // order and then delete the line items.
+  $line_item_ids = array();
+
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+
+    // If this line item is of $line_item_type type.
+    if ($line_item_wrapper->type->value() == $line_item_type) {
+
+      // Store its ID for later deletion and remove the reference from the line
+      // item reference field.
+      $line_item_ids[] = $line_item_wrapper->line_item_id->value();
+      $order_wrapper->commerce_line_items->offsetUnset($delta);
+
+    } // if
+
+  } // foreach
+
+  // If we found any $line_item_type type line items.
+  if (!empty($line_item_ids)) {
+
+    // First save the order to update the line item reference field value.
+    if (!$skip_save) {
+      commerce_order_save($order);
+    } // if
+
+    // Then delete the line items.
+    commerce_line_item_delete_multiple($line_item_ids);
+
+  } // if
+
+} // custom_checkoutgift_cart_order_custom_line_item_delete
+
+/**
+ * Form validation handler for adding a new gift_line item to the order.
+ */
+function custom_checkoutgift_apply_validate($form, &$form_state) {
+
+  // Empty messages are not allowed.
+  if (!$form_state['values']['custom_checkoutgift']['custom_checkoutgift_display']['message']) {
+
+    form_set_error(
+        'custom_checkoutgift_display][message',
+        t('Please enter a Gift message!')
+    );
+
+  } // if
+
+} // custom_checkoutgift_checkout_form_apply_validate
+
+/**
+ * Form submit handler for adding a new gift_line item to the order.
+ *
+ * Saves the gift message to the database and adds a gift_service line item.
+ */
+function custom_checkoutgift_apply_submit($form, &$form_state) {
+
+  $order = commerce_order_load($form_state['order']->order_id);
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $gift_message =
+    $form_state['input']['custom_checkoutgift']['custom_checkoutgift_display']['message'];
+
+  // Updates the gift message.
+  $order_wrapper->field_customco_gift_message->set($gift_message);
+
+  // Checks if a gift_service line item is already added to the order.
+  $gift_service_added = FALSE;
+  $line_items = $order_wrapper->commerce_line_items;
+  foreach ($line_items as $delta => $line_item_wrapper) {
+
+    // Checks if a line item is a gift service.
+    if ($line_item_wrapper->type->value() == 'gift_service') {
+      $gift_service_added = TRUE;
+      continue;
+    } // if
+
+  } // foreach
+
+  // No gift service line item found, we add one here.
+  if (!$gift_service_added) {
+
+    $line_item = custom_checkoutgift_line_item_new($order->order_id);
+    $order_wrapper->commerce_line_items[] = $line_item;
+    commerce_line_item_save($line_item);
+    $order->commerce_line_items[LANGUAGE_NONE][] =
+        array('line_item_id' => $line_item->line_item_id);
+
+  } // if
+
+  commerce_order_save($order);
+
+  drupal_set_message(t('Gift message saved.'));
+
+} // custom_checkoutgift_checkout_form_apply_submit
+
+/**
+ * Form submit handler for removing a gift_line item from the order.
+ *
+ * Removes the gift message and the gift_service line item.
+ */
+function custom_checkoutgift_remove_submit($form, &$form_state) {
+
+  $order = commerce_order_load($form_state['order']->order_id);
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  custom_checkoutgift_cart_order_custom_line_item_delete(
+      'gift_service',
+      $order,
+      TRUE
+  );
+
+  $order_wrapper->field_customco_gift_message->set('');
+  commerce_order_save($order);
+
+  drupal_set_message(t('Gift message removed.'));
+
+} // custom_checkoutgift_checkout_form_remove_submit
